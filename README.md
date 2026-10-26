@@ -59,6 +59,18 @@ ct 'D:\My Project'
 
 Neovim remains modal: `i` enters Insert mode, Escape returns to Normal. Ctrl+W then W changes editor splits. A `.py`/`.cpp` extension enables language features. Save before asking AI to read a file. Python interpreter selection respects active VIRTUAL_ENV and project `.venv`. C++ F6 builds a single file; larger projects need their own build system and compile_commands.json.
 
+## Experimental graphical PDF (Windows)
+
+Checkpoint tag: **`before-pdf-webview-20261027`** (`d66116c`). This preserves the editor before graphical PDF work. Fetch it with `git fetch origin --tags`. For a full independent old checkout, run `git worktree add ../desktop-idle-before-pdf before-pdf-webview-20261027` (that checkout needs its own setup). Avoid `git reset --hard` when you have uncommitted configuration.
+
+Install with `Install.ps1 -GraphicalPDF` to add pywebview 6.2.1 (BSD-3-Clause) and its Python dependencies. Requires Microsoft Edge WebView2 Runtime and Windows .NET Framework; the installer does not install these system components. Open a PDF normally, then **F10** or `:PDFGraphics` to toggle graphical mode. The standard installer keeps text mode as default; -GraphicalPDF enables graphical opening in ignored settings.local.ps1. F10 disables automatic graphical opening for the rest of the session, or enables it again. The graphical surface is a native child WebView2 window docked into the PDF area, not a terminal image or a full browser. If the owning WezTerm window cannot be identified uniquely, the viewer falls back to a separate native window.
+
+The built-in WebView2 PDF toolbar supplies page navigation and zoom; text selection/copy follow the native viewer. While the PDF has native keyboard focus, Neovim shortcuts do not receive those keys: click the editor/header outside the PDF before F10, F8, or Ctrl+W. It is an experimental integration: high DPI, multiple terminal panes, tab changes and all window focus combinations are not fully validated. Do not enable it globally until you have tested your workflow. Set `DESKTOP_IDLE_PDF_GRAPHICS=1` before launching only if you want automatic graphical opening.
+
+The helper serves exactly one PDF at a random loopback-only URL, uses a private WebView2 profile, does not expose the project directory, and exits when its controller file disappears or its editor process ends. It does not reuse browser accounts. PDF links may invoke the system browser. Runtime controller/status files stay in ignored cache directories.
+
+Rollback only this feature with `Rollback-PDF.ps1` after closing the editor. It backs up config, restores the text reader from the checkpoint tag and removes the graphical module startup line; it does not delete dependencies or personal files.
+
 ## Optional AI
 
 Install Codex CLI separately and sign in with **your own account**. F8 opens the CLI in the current project; hiding it preserves the running conversation. No credentials, API keys, chat history or account configuration are included in this repository. No automatic prompt or code upload occurs just from the editor integration. CLI access, approvals, usage limits and charges follow your own Codex configuration/account. Selected code and unsaved buffers are not automatically attached.

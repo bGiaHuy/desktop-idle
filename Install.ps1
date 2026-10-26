@@ -1,4 +1,4 @@
-param([string]$Python, [switch]$SkipShortcut)
+param([string]$Python, [switch]$SkipShortcut, [switch]$GraphicalPDF)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 foreach ($command in @('git', 'node', 'npm.cmd', 'g++')) {
@@ -43,6 +43,11 @@ if (-not (Test-Path -LiteralPath "$root\tools\python\Scripts\python.exe")) {
 }
 & "$root\tools\python\Scripts\python.exe" -m pip install 'ruff==0.17.2' 'clang-format==23.1.3' 'debugpy==1.8.22' 'pynvim==0.6.0' 'PyMuPDF==2.0'
 if ($LASTEXITCODE) { throw 'Python dependency install failed.' }
+if ($GraphicalPDF) {
+    & "$root\tools\python\Scripts\python.exe" -m pip install 'pywebview==6.2.1'
+    if ($LASTEXITCODE) { throw 'Optional graphical PDF dependency install failed.' }
+    Add-Content -LiteralPath "$root\settings.local.ps1" -Value "`n`$env:DESKTOP_IDLE_PDF_GRAPHICS = '1'"
+}
 & npm.cmd install --prefix "$root\tools\node" 'pyright@1.1.414'
 if ($LASTEXITCODE) { throw 'Pyright install failed.' }
 . "$root\Environment.ps1"

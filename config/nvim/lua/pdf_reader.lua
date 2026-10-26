@@ -40,6 +40,10 @@ function M.read(buf)
   vim.keymap.set('n','[p',function() M.page(buf,math.max(1,(vim.b[buf].pdf_page or 1)-1)) end,{buffer=buf,desc='Previous PDF page'})
   vim.keymap.set('n','gp',function() vim.ui.input({prompt='PDF page: '},function(p) if tonumber(p) then M.page(buf,tonumber(p)) end end) end,{buffer=buf})
   M.page(buf,1)
+  vim.keymap.set('n','<F10>',function() require('pdf_graphics').toggle() end,{buffer=buf,desc='Toggle graphical PDF / text'})
+  if require('pdf_graphics').enabled then
+    vim.schedule(function() if vim.api.nvim_buf_is_valid(buf) then require('pdf_graphics').start(buf) end end)
+  end
 end
 function M.pick()
   require('lazy').load({plugins={'telescope.nvim'}})
