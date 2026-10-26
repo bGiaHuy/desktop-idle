@@ -67,6 +67,24 @@ c.mouse_bindings = {
   { event={Down={streak=1,button='Left'}}, mods='ALT', action=act.StartWindowDrag },
 }
 local ai_sizes = {}
+c.status_update_interval = 200
+wezterm.on('update-status', function(window)
+  local tab = window:active_tab()
+  local gui_pane = window:active_pane()
+  if not tab or not gui_pane then return end
+  local real_panes = {}
+  for _,pane in ipairs(tab:panes()) do real_panes[pane:pane_id()] = true end
+  local overlay = not real_panes[gui_pane:pane_id()]
+  for _,mux_tab in ipairs(window:mux_window():tabs()) do
+    for _,pane in ipairs(mux_tab:panes()) do
+      local f=io.open(root .. '/cache/webview-pane-' .. pane:pane_id() .. '.json','w')
+      if f then
+        f:write(wezterm.json_encode({visible=not overlay and mux_tab:tab_id()==tab:tab_id(),overlay=overlay}))
+        f:close()
+      end
+    end
+  end
+end)
 local center_pending = {}
 local function center_window(window, screen)
   local d = window:get_dimensions()

@@ -13,6 +13,7 @@ from pathlib import Path
 import secrets
 import threading
 import time
+from urllib.parse import urlparse
 
 import psutil
 import webview
@@ -20,15 +21,21 @@ import webview
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--file', required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument('--file')
+    source.add_argument('--url')
     parser.add_argument('--control', required=True)
     parser.add_argument('--pid', required=True, type=int)
     parser.add_argument('--test-seconds', type=float, default=0)
     args = parser.parse_args()
-    pdf = Path(args.file).resolve(strict=True)
-    if pdf.suffix.lower() != '.pdf':
+    pdf = Path(args.file).resolve(strict=True) if args.file else None
+    if pdf and pdf.suffix.lower() != '.pdf':
         raise ValueError('Only PDF files are supported')
+    if args.url and urlparse(args.url).scheme not in ('http', 'https', 'about'):
+        raise ValueError('Browser supports HTTP/HTTPS URLs only')
     control = Path(args.control)
+    pane_id = os.environ.get('WEZTERM_PANE')
+    host_state = Path(os.environ.get('TRANSPARENT_CODING_ROOT', control.parent)) / 'cache' / f'webview-pane-{pane_id}.json'
     token = secrets.token_urlsafe(24)
     metrics = {}
 
@@ -66,7 +73,9 @@ iframe{display:block;box-sizing:border-box;width:100%;height:100%;border:2px sol
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     url = f'http://127.0.0.1:{server.server_port}/{token}/viewer.html'
-    window = webview.create_window('Desktop Idle PDF', url, width=900, height=850,
+    if args.url:
+        url = args.url
+    window = webview.create_window('Desktop Idle Browser' if args.url else 'Desktop Idle PDF', url, width=900, height=850,
                                    frameless=True, hidden=True, background_color='#181825')
     status = control.with_suffix('.status.json')
     user = ctypes.windll.user32
@@ -123,12 +132,75 @@ iframe{display:block;box-sizing:border-box;width:100%;height:100%;border:2px sol
             style = user.GetWindowLongW(own_hwnd, -16)
             user.SetWindowLongW(own_hwnd, -16, (style & ~0x80000000) | 0x40000000)
         write_status(started=True, docked=bool(parent), hwnd=own_hwnd, parent=parent,
-                     backend='edgechromium', pdf=str(pdf),border_pixels=2,border_color='#45475a')
+                     backend='edgechromium', pdf=str(pdf) if pdf else None,browser=bool(args.url),border_pixels=2,border_color='#45475a')
+
+    def install_browser_toolbar():
+        # Marshal all WinForms mutations to its UI thread.
+        from System import Action
+        from System.Drawing import Color, Point, Size
+        from System.Windows.Forms import Panel, Button, TextBox, AnchorStyles, DockStyle, Keys
+
+        def create():
+            form = window.native
+            view = form.browser.webview
+            view.Dock = getattr(DockStyle, 'None')
+            view.Location = Point(2, 42)
+            view.Size = Size(max(1, form.ClientSize.Width - 4), max(1, form.ClientSize.Height - 44))
+            view.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+            form.BackColor = Color.FromArgb(69, 71, 90)
+            bar = Panel()
+            bar.Location = Point(2, 2)
+            bar.Size = Size(max(1, form.ClientSize.Width - 4), 38)
+            bar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            bar.BackColor = Color.FromArgb(24, 24, 37)
+            for index, (label, callback) in enumerate([
+                ('<', lambda: view.GoBack() if view.CanGoBack else None),
+                ('>', lambda: view.GoForward() if view.CanGoForward else None),
+                ('↻', lambda: view.Reload()),
+            ]):
+                button = Button()
+                button.Text = label
+                button.Location = Point(4 + index * 34, 4)
+                button.Size = Size(32, 30)
+                button.ForeColor = Color.FromArgb(205, 214, 244)
+                button.BackColor = Color.FromArgb(49, 50, 68)
+                button.Click += lambda sender, event, callback=callback: callback()
+                bar.Controls.Add(button)
+            address = TextBox()
+            address.Text = url
+            address.Location = Point(110, 9)
+            address.Size = Size(max(80, bar.Width - 120), 24)
+            address.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            address.BackColor = Color.FromArgb(49, 50, 68)
+            address.ForeColor = Color.FromArgb(205, 214, 244)
+
+            def navigate(sender, event):
+                if event.KeyCode == Keys.Enter:
+                    target = str(address.Text).strip()
+                    if '://' not in target and target != 'about:blank':
+                        target = ('http://' if target.startswith(('localhost:', 'localhost/', '127.0.0.1:', '127.0.0.1/')) else 'https://') + target
+                    if urlparse(target).scheme in ('http', 'https', 'about'):
+                        window.load_url(target)
+                    event.SuppressKeyPress = True
+
+            def navigated(sender, event):
+                if not address.Focused:
+                    address.Text = str(view.Source)
+
+            address.KeyDown += navigate
+            view.NavigationCompleted += navigated
+            bar.Controls.Add(address)
+            form.Controls.Add(bar)
+            bar.BringToFront()
+            write_status(toolbar=True)
+
+        window.native.Invoke(Action(create))
 
     def monitor():
         nonlocal alive
         started = time.monotonic()
         last_visible = None
+        toolbar_installed = False
         # Work in physical coordinates even when monitors have different scaling.
         if hasattr(user, 'SetThreadDpiAwarenessContext'):
             user.SetThreadDpiAwarenessContext.argtypes = [ctypes.c_void_p]
@@ -142,7 +214,18 @@ iframe{display:block;box-sizing:border-box;width:100%;height:100%;border:2px sol
             try:
                 state = json.loads(control.read_text(encoding='utf-8'))
                 if own_hwnd:
+                    if args.url and not toolbar_installed:
+                        install_browser_toolbar()
+                        toolbar_installed = True
                     visible = state.get('visible', False)
+                    host_overlay = False
+                    if pane_id and host_state.exists():
+                        try:
+                            host = json.loads(host_state.read_text(encoding='utf-8'))
+                            host_overlay = host.get('overlay', False)
+                            visible = visible and host.get('visible', True)
+                        except (ValueError, OSError):
+                            pass
                     if parent and user.IsWindow(parent):
                         rect = wintypes.RECT()
                         user.GetClientRect(parent, ctypes.byref(rect))
@@ -169,9 +252,11 @@ iframe{display:block;box-sizing:border-box;width:100%;height:100%;border:2px sol
                     if last_visible != visible:
                         user.ShowWindow(own_hwnd, 4 if visible else 0)
                         last_visible = visible
+                    if host_overlay and not visible:
+                        metrics['overlay_hidden_verified'] = not bool(user.IsWindowVisible(own_hwnd))
                     if parent:
                         write_status(visible=visible,rect=[x,y,w,h],actual_rect=observed,
-                                     geometry_matches=observed==[x,y,w,h])
+                                     geometry_matches=observed==[x,y,w,h],host_overlay=host_overlay)
             except (OSError, ValueError):
                 pass
             time.sleep(.15)
@@ -179,6 +264,13 @@ iframe{display:block;box-sizing:border-box;width:100%;height:100%;border:2px sol
         window.destroy()
 
     window.events.shown += shown
+    def loaded():
+        if args.url:
+            values = {'browser_page_loaded': True}
+            if args.test_seconds:
+                values['test_page_title'] = window.evaluate_js('document.title')
+            write_status(**values)
+    window.events.loaded += loaded
     try:
         webview.start(monitor, gui='edgechromium', private_mode=True)
     finally:

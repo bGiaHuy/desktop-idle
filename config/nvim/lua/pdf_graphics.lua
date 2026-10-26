@@ -36,12 +36,16 @@ function M.start(buf)
   sessions[buf]={control=control}
   sync()
   local stderr={}
-  local job=vim.fn.jobstart({vim.env.CODING_PYTHON,script,'--file',vim.api.nvim_buf_get_name(buf),'--control',control,'--pid',tostring(vim.fn.getpid())},{
+  local source=vim.b[buf].desktop_browser and {'--url',vim.b[buf].browser_url or 'about:blank'} or {'--file',vim.api.nvim_buf_get_name(buf)}
+  local args={vim.env.CODING_PYTHON,script}
+  vim.list_extend(args,source)
+  vim.list_extend(args,{'--control',control,'--pid',tostring(vim.fn.getpid())})
+  local job=vim.fn.jobstart(args,{
     stderr_buffered=true,on_stderr=function(_,data) stderr=data end,
     on_exit=function(_,code)
       vim.schedule(function()
         M.stop(buf)
-        if code~=0 then vim.notify('PDF graphics stopped; text reader remains available. '..table.concat(stderr,' '),vim.log.levels.WARN) end
+        if code~=0 then vim.notify('WebView stopped. '..table.concat(stderr,' '),vim.log.levels.WARN) end
       end)
     end})
   if job<=0 then M.stop(buf);return end
@@ -60,7 +64,7 @@ function M.setup()
   vim.api.nvim_create_user_command('PDFGraphics',M.toggle,{force=true})
   local group=vim.api.nvim_create_augroup('DesktopPDFGraphics',{clear=true})
   vim.api.nvim_create_autocmd('BufEnter',{group=group,callback=function(e)
-    if M.enabled and vim.b[e.buf].desktop_pdf then
+    if vim.b[e.buf].desktop_browser or (M.enabled and vim.b[e.buf].desktop_pdf) then
       vim.schedule(function() if vim.api.nvim_buf_is_valid(e.buf) then M.start(e.buf) end end)
     end
   end})

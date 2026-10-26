@@ -71,6 +71,12 @@ The helper serves exactly one PDF at a random loopback-only URL, uses a private 
 
 Rollback only this feature with `Rollback-PDF.ps1` after closing the editor. It backs up config, restores the text reader from the checkpoint tag and removes the graphical module startup line; it does not delete dependencies or personal files.
 
+## Browser tabs
+
+With the optional graphical dependencies installed, type **`:brs`** then Enter to create a Browser tab, or **`:brs https://example.com`** for a URL. `:Browser` is the underlying uppercase Neovim command; `brs` is its command-line abbreviation. Back, forward, reload and an address bar are provided by the native WebView2 host. `localhost:3000` defaults to HTTP; ordinary hostnames default to HTTPS. Only HTTP/HTTPS and `about:blank` are accepted from this command.
+
+Each Browser is a listed, read-only buffer; switch with Ctrl+Tab and close with Ctrl+W after clicking its editor header. Website focus handles keyboard input itself, so editor shortcuts need focus returned to the editor. Each helper uses its own private profile, without importing browser accounts/cookies. No persistent sign-in guarantee, download manager or full-browser extension system is provided. Child surfaces hide while WezTerm's native overlay/close confirmation is active, so the confirmation is not obscured.
+
 ## Optional AI
 
 Install Codex CLI separately and sign in with **your own account**. F8 opens the CLI in the current project; hiding it preserves the running conversation. No credentials, API keys, chat history or account configuration are included in this repository. No automatic prompt or code upload occurs just from the editor integration. CLI access, approvals, usage limits and charges follow your own Codex configuration/account. Selected code and unsaved buffers are not automatically attached.

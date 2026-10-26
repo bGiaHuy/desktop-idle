@@ -1,12 +1,12 @@
 local M={}
 local function buffers()
-  return vim.tbl_filter(function(b) return vim.bo[b].buflisted and (vim.bo[b].buftype=='' or vim.b[b].desktop_pdf) end,vim.api.nvim_list_bufs())
+  return vim.tbl_filter(function(b) return vim.bo[b].buflisted and (vim.bo[b].buftype=='' or vim.b[b].desktop_pdf or vim.b[b].desktop_browser) end,vim.api.nvim_list_bufs())
 end
 function M.select(_,buf) if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_set_current_buf(buf) end end
 function M.render()
   local result=''
   for _,b in ipairs(buffers()) do
-    local name=vim.fn.fnamemodify(vim.api.nvim_buf_get_name(b),':t')
+    local name=vim.b[b].desktop_tab_label or vim.fn.fnamemodify(vim.api.nvim_buf_get_name(b),':t')
     if name=='' then name='Untitled' end
     name=name:gsub('%%','%%%%')
     result=result..'%'..b..'@v:lua.DesktopFileTabsClick@'..(b==vim.api.nvim_get_current_buf() and '%#TabLineSel#' or '%#TabLine#')..'  '..name..(vim.bo[b].modified and ' ●' or '')..'  %T%#TabLineFill# '
@@ -21,7 +21,7 @@ end
 function M.close()
   vim.cmd.stopinsert()
   local buf=vim.api.nvim_get_current_buf()
-  if vim.bo[buf].buftype~='' and not vim.b[buf].desktop_pdf then return end
+  if vim.bo[buf].buftype~='' and not vim.b[buf].desktop_pdf and not vim.b[buf].desktop_browser then return end
   local function remove()
     if not vim.api.nvim_buf_is_valid(buf) then return end
     local replacement
