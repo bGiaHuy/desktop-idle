@@ -28,6 +28,9 @@ local function opacity(delta, toggle)
   end)
 end
 c.keys = {
+  { key='LeftArrow', mods='CTRL', action=act.SendString '\x1b[1;5D' },
+  { key='RightArrow', mods='CTRL', action=act.SendString '\x1b[1;5C' },
+  { key='w', mods='CTRL', action=act.SendString '\x17' },
   { key='/', mods='CTRL', action=act.SendString '\x1b[47;5u' },
   { key='F', mods='CTRL|SHIFT', action=act.SendString '\x1b[102;6u' },
   { key='P', mods='CTRL|SHIFT', action=act.SendString '\x1b[112;6u' },
@@ -52,12 +55,34 @@ c.keys = {
   { key='DownArrow', mods='ALT', action=act.SendString '\x1b[1;3B' },
   { key='UpArrow', mods='CTRL|ALT', action=act.ActivatePaneDirection 'Up' },
   { key='DownArrow', mods='CTRL|ALT', action=act.ActivatePaneDirection 'Down' },
-  { key='C', mods='CTRL|ALT', action=act.SpawnCommandInNewTab { args={'codex'} } },
+  { key='F9', mods='NONE', action=wezterm.action_callback(function(window)
+    local d=window:get_dimensions()
+    if d.is_full_screen then return end
+    local screen=wezterm.gui.screens().active
+    window:set_position(math.floor(screen.x+math.max(0,(screen.width-d.pixel_width)/2)),
+      math.floor(screen.y+math.max(0,(screen.height-d.pixel_height)/2)))
+  end) },
 }
 c.mouse_bindings = {
   { event={Down={streak=1,button='Left'}}, mods='ALT', action=act.StartWindowDrag },
 }
 local ai_sizes = {}
+local center_pending = {}
+local function center_window(window, screen)
+  local d = window:get_dimensions()
+  if d.is_full_screen then return end
+  screen = screen or wezterm.gui.screens().active
+  window:set_position(math.floor(screen.x + math.max(0,(screen.width-d.pixel_width)/2)),
+    math.floor(screen.y + math.max(0,(screen.height-d.pixel_height)/2)))
+end
+wezterm.on('window-resized', function(window)
+  local id = window:window_id()
+  if center_pending[id] then
+    local screen = center_pending[id]
+    center_pending[id] = nil
+    center_window(window, screen)
+  end
+end)
 wezterm.on('user-var-changed', function(window, pane, name, value)
   if name ~= 'CODING_AI_WIDTH' then return end
   local id = window:window_id()
@@ -68,7 +93,9 @@ wezterm.on('user-var-changed', function(window, pane, name, value)
     if d.is_full_screen then return end
     local cells = pane:get_dimensions().cols
     if cells < 1 then return end
+    local screen = wezterm.gui.screens().active
     ai_sizes[id] = {width=d.pixel_width,height=d.pixel_height}
+    center_pending[id] = screen
     window:set_inner_size(math.floor(d.pixel_width + cols * d.pixel_width / cells), d.pixel_height)
   elseif ai_sizes[id] then
     local saved = ai_sizes[id]
@@ -80,6 +107,7 @@ wezterm.on('user-var-changed', function(window, pane, name, value)
       log:close()
     end
     ai_sizes[id] = nil
+    center_pending[id] = wezterm.gui.screens().active
     window:set_inner_size(saved.width, saved.height)
   end
 end)

@@ -41,7 +41,7 @@ if (-not (Test-Path -LiteralPath "$root\tools\python\Scripts\python.exe")) {
     & $Python -m venv "$root\tools\python"
     if ($LASTEXITCODE) { throw 'Virtualenv creation failed.' }
 }
-& "$root\tools\python\Scripts\python.exe" -m pip install 'ruff==0.17.2' 'clang-format==23.1.3' 'debugpy==1.8.22' 'pynvim==0.6.0'
+& "$root\tools\python\Scripts\python.exe" -m pip install 'ruff==0.17.2' 'clang-format==23.1.3' 'debugpy==1.8.22' 'pynvim==0.6.0' 'PyMuPDF==2.0'
 if ($LASTEXITCODE) { throw 'Python dependency install failed.' }
 & npm.cmd install --prefix "$root\tools\node" 'pyright@1.1.414'
 if ($LASTEXITCODE) { throw 'Pyright install failed.' }

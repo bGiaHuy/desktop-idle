@@ -35,3 +35,6 @@ require('lazy').setup('plugins', {
 require('coding')
 require('desktop_keys').setup()
 require('ai_panel').setup()
+require('file_tabs').setup()
+require('pdf_reader').setup()
+require('context_menu').setup()

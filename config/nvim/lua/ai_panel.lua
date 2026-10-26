@@ -81,6 +81,32 @@ function M.toggle()
     toggle_panel(width)
   end,400)
 end
+function M.draft(text)
+  local attempts=0
+  local function deliver()
+    attempts=attempts+1
+    for _,win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      local buf=vim.api.nvim_win_get_buf(win)
+      if vim.b[buf].coding_ai_panel then
+        local job=vim.b[buf].terminal_job_id
+        if job and vim.fn.jobwait({job},0)[1]==-1 then
+          vim.api.nvim_set_current_win(win)
+          -- Bracketed paste inserts a draft; no Enter is sent.
+          text=text:gsub('[\27\000]','')
+          vim.fn.chansend(job,'\27[200~'..text..'\27[201~')
+          vim.cmd.startinsert()
+          return
+        end
+      end
+    end
+    if attempts<12 then vim.defer_fn(deliver,300)
+    else vim.notify('AI draft could not be inserted. Open Codex with F8 and retry.',vim.log.levels.WARN) end
+  end
+  local visible=false
+  for _,win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do if vim.b[vim.api.nvim_win_get_buf(win)].coding_ai_panel then visible=true end end
+  if not visible then M.toggle() end
+  vim.defer_fn(deliver,visible and 50 or 1800)
+end
 function M.setup()
   vim.keymap.set({'n','i','t'},'<F8>',M.toggle,{desc='Toggle Codex AI sidebar'})
   vim.keymap.set('n','<leader>ai',M.toggle,{desc='Codex AI sidebar'})
