@@ -1,0 +1,16 @@
+tools/
+data/
+state/
+cache/
+backup/
+evidence/
+.downloads/
+settings.local.ps1
+*.log
+*.exe
+*.dll
+*.zip
+*.swp
+__pycache__/
+.env*
+.codex/
