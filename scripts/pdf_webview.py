@@ -79,6 +79,9 @@ iframe{display:block;box-sizing:border-box;width:100%;height:100%;border:2px sol
     user.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_long]
     user.MoveWindow.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.BOOL]
     user.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    user.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    user.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+    user.SetWindowPos.argtypes = [wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_uint]
     user.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
     own_hwnd = None
     parent = None
@@ -125,8 +128,11 @@ iframe{display:block;box-sizing:border-box;width:100%;height:100%;border:2px sol
     def monitor():
         nonlocal alive
         started = time.monotonic()
-        last_rect = None
         last_visible = None
+        # Work in physical coordinates even when monitors have different scaling.
+        if hasattr(user, 'SetThreadDpiAwarenessContext'):
+            user.SetThreadDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+            user.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))
         window.show()
         while alive:
             if args.test_seconds and time.monotonic() - started > args.test_seconds:
@@ -141,20 +147,31 @@ iframe{display:block;box-sizing:border-box;width:100%;height:100%;border:2px sol
                         rect = wintypes.RECT()
                         user.GetClientRect(parent, ctypes.byref(rect))
                         width, height = rect.right, rect.bottom
-                        x = round(state.get('x', 0) * width)
-                        y = round(state.get('y', 0) * height)
-                        w = max(100, round(state.get('width', 1) * width))
-                        h = max(100, round(state.get('height', 1) * height))
-                        if last_rect != (x,y,w,h):
-                            user.MoveWindow(own_hwnd, x, y, w, h, True)
-                            last_rect = (x,y,w,h)
+                        x = max(0, min(width-1, round(state.get('x', 0) * width)))
+                        y = max(0, min(height-1, round(state.get('y', 0) * height)))
+                        w = max(1, min(width-x, round(state.get('width', 1) * width)))
+                        h = max(1, min(height-y, round(state.get('height', 1) * height)))
+                        origin = wintypes.POINT(0, 0)
+                        user.ClientToScreen(parent, ctypes.byref(origin))
+                        actual = wintypes.RECT()
+                        user.GetWindowRect(own_hwnd, ctypes.byref(actual))
+                        observed = [actual.left-origin.x, actual.top-origin.y,
+                                    actual.right-actual.left, actual.bottom-actual.top]
+                        # WinForms can reposition the form after the first docking call.
+                        # Compare actual native geometry, rather than only the last request.
+                        if observed != [x,y,w,h]:
+                            user.SetWindowPos(own_hwnd, None, x, y, w, h, 0x0014)
+                        user.GetWindowRect(own_hwnd, ctypes.byref(actual))
+                        observed = [actual.left-origin.x, actual.top-origin.y,
+                                    actual.right-actual.left, actual.bottom-actual.top]
                     elif parent:
                         break
                     if last_visible != visible:
                         user.ShowWindow(own_hwnd, 4 if visible else 0)
                         last_visible = visible
                     if parent:
-                        write_status(visible=visible,rect=[x,y,w,h])
+                        write_status(visible=visible,rect=[x,y,w,h],actual_rect=observed,
+                                     geometry_matches=observed==[x,y,w,h])
             except (OSError, ValueError):
                 pass
             time.sleep(.15)
